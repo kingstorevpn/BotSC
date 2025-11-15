@@ -1,0 +1,156 @@
+#!/bin/bash
+
+# Colors
+green="\e[38;5;82m"
+red="\e[38;5;196m"
+neutral="\e[0m"
+orange="\e[38;5;130m"
+blue="\e[38;5;39m"
+yellow="\e[38;5;226m"
+purple="\e[38;5;141m"
+bold_white="\e[1;37m"
+reset="\e[0m"
+pink="\e[38;5;205m"
+print_rainbow() {
+    local text="$1"
+    local length=${#text}
+    local start_color=(0 5 0)
+    local mid_color=(0 200 0)
+    local end_color=(0 5 0)
+
+    for ((i = 0; i < length; i++)); do
+        local progress=$(echo "scale=2; $i / ($length - 1)" | bc)
+
+        if (($(echo "$progress < 0.5" | bc -l))); then
+            local factor=$(echo "scale=2; $progress * 2" | bc)
+            r=$(echo "scale=0; (${start_color[0]} * (1-$factor) + ${mid_color[0]} * $factor)/1" | bc)
+            g=$(echo "scale=0; (${start_color[1]} * (1-$factor) + ${mid_color[1]} * $factor)/1" | bc)
+            b=$(echo "scale=0; (${start_color[2]} * (1-$factor) + ${mid_color[2]} * $factor)/1" | bc)
+        else
+            local factor=$(echo "scale=2; ($progress - 0.5) * 2" | bc)
+            r=$(echo "scale=0; (${mid_color[0]} * (1-$factor) + ${end_color[0]} * $factor)/1" | bc)
+            g=$(echo "scale=0; (${mid_color[1]} * (1-$factor) + ${end_color[1]} * $factor)/1" | bc)
+            b=$(echo "scale=0; (${mid_color[2]} * (1-$factor) + ${end_color[2]} * $factor)/1" | bc)
+        fi
+
+        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "${text:$i:1}"
+    done
+    echo -e "$reset"
+}
+cek_status() {
+    pm2 status | grep -q sellsc && echo "aktif" || echo "nonaktif"
+}
+
+setup_bot() {
+    timedatectl set-timezone Asia/Jakarta || echo -e "${red}Failed to set timezone to Jakarta${neutral}"
+    
+    if ! dpkg -s nodejs >/dev/null 2>&1; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || echo -e "${red}Failed to download Node.js setup${neutral}"
+        apt-get install -y nodejs || echo -e "${red}Failed to install Node.js${neutral}"
+        npm install -g npm@latest
+        npm install -g pm2
+    else
+        echo -e "${green}Node.js is already installed, skipping...${neutral}"
+    fi
+
+    if [ ! -f /root/BotSC/app.js ]; then
+        git clone https://github.com/arivpnstores/BotSC.git /root/BotSC
+    fi
+
+    if ! npm list --prefix /root/BotSC express telegraf axios moment sqlite3 >/dev/null 2>&1; then
+        npm install --prefix /root/BotSC sqlite3 express crypto telegraf axios dotenv
+    fi
+
+    if [ -n "$(ls -A /root/BotSC)" ]; then
+        chmod +x /root/BotSC/*
+    fi
+}
+
+server_app() {
+    clear
+cat >/etc/systemd/system/sellsc.service <<EOF
+[Unit]
+Description=sellsc Bot Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/BotSC
+ExecStart=/usr/bin/node /root/BotSC/app.js
+Restart=always
+User=root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/usr/bin/backup_sellsc <<'EOF'
+#!/bin/bash
+# File: /usr/bin/backup_sellsc
+# Pastikan chmod +x /usr/bin/backup_sellsc
+
+VARS_FILE="/root/BotSC/.vars.json"
+DB_FOLDER="/root/BotSC"
+
+# Cek file .vars.json
+if [ ! -f "$VARS_FILE" ]; then
+    echo "❌ File $VARS_FILE tidak ditemukan"
+    exit 1
+fi
+
+# Ambil nilai dari .vars.json
+BOT_TOKEN=$(jq -r '.BOT_TOKEN' "$VARS_FILE")
+USER_ID=$(jq -r '.USER_ID' "$VARS_FILE")
+
+if [ -z "$BOT_TOKEN" ] || [ -z "$USER_ID" ]; then
+    echo "❌ BOT_TOKEN atau USER_ID kosong di $VARS_FILE"
+    exit 1
+fi
+
+# Daftar file database
+DB_FILES=("sellvpn.db" "ressel.db" "trial.db")
+
+for DB_FILE in "${DB_FILES[@]}"; do
+    FILE_PATH="$DB_FOLDER/$DB_FILE"
+    if [ -f "$FILE_PATH" ]; then
+        curl -s -F chat_id="$USER_ID" \
+             -F document=@"$FILE_PATH" \
+             "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" >/dev/null 2>&1
+        echo "✅ $DB_FILE terkirim ke Telegram"
+    else
+        echo "❌ File $DB_FILE tidak ditemukan"
+    fi
+done
+
+echo "✅ Semua backup selesai."
+EOF
+
+# bikin cron job tiap 1 jam
+cat >/etc/cron.d/backup_sellsc <<'EOF'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+0 0 * * * root /usr/bin/backup_sellsc
+EOF
+
+chmod +x /usr/bin/backup_sellsc
+
+systemctl daemon-reload >/dev/null 2>&1
+systemctl enable sellsc.service >/dev/null 2>&1
+systemctl start sellsc.service >/dev/null 2>&1
+systemctl restart sellsc.service >/dev/null 2>&1
+service cron restart
+
+    echo -e "       Status Server is "$(cek_status)""
+    echo -e "${orange}─────────────────────────────────────────${neutral}"
+    echo -e "${green}Bot has been installed and running.${neutral}"
+    echo -e "${green}Type ${bold_white}/start${neutral} or ${bold_white}menu${neutral} in the telegram bot${neutral}"
+}
+
+if [[ ${1} == "sellsc" ]]; then
+    setup_bot
+    server_app
+else
+    echo -e "${red}Invalid command. Use: ${yellow}start sellsc${neutral}"
+    exit 1
+fi 
