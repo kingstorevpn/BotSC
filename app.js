@@ -32,6 +32,13 @@ app.use(express.urlencoded({ extended: true }));
 const fs = require('fs');
 const path = require('path');
 const totalip = './total.db';
+const resselFilePath = path.join(__dirname, 'ressel.db');
+
+function isUserReseller(userId) {
+  if (!fs.existsSync(resselFilePath)) return false;
+  const list = fs.readFileSync(resselFilePath, 'utf8').split('\n').map(l => l.trim()).filter(Boolean);
+  return list.includes(String(userId));
+}
 
 function updateTotalCreateAkun(ctx) {
   let total = 0;
@@ -77,8 +84,21 @@ const API_KEY = vars.API_KEY;
 const GROUP_ID = vars.GROUP_ID;
 
 const bot = new Telegraf(BOT_TOKEN);
+let ADMIN_USERNAME = '';
 const adminIds = ADMIN;
 logger.info('Bot initialized');
+
+(async () => {
+  try {
+    const adminId = Array.isArray(adminIds) ? adminIds[0] : adminIds;
+    const chat = await bot.telegram.getChat(adminId);
+    ADMIN_USERNAME = chat.username ? `@${chat.username}` : 'Admin';
+    logger.info(`Admin username detected: ${ADMIN_USERNAME}`);
+  } catch (e) {
+    ADMIN_USERNAME = 'Admin';
+    logger.warn('Tidak bisa ambil username admin otomatis.');
+  }
+})();
 
 const db = new sqlite3.Database('./sellsc.db', (err) => {
   if (err) {
@@ -276,23 +296,47 @@ dalam layanan VPN dengan bot kami!
 ⏱️ Latency: ${latency} ms
 ──────────────────────────`;
 
-const keyboard = [
-  [
-    { text: '➕ Beli SC TUNNEL', callback_data: 'register_ip' },
-    { text: '♻️ Renew SC TUNNEL', callback_data: 'renew_ip' }
-  ],
-  [
-    { text: '❌ Delete SC TUNNEL', callback_data: 'del_ip' },
-    { text: '⌛ Trial SC TUNNEL', callback_data: 'trial_ip' }
-  ],
-  [
-    { text: '🔄 Ganti SC TUNNEL', callback_data: 'ganti_ip' },
-    { text: '🔗 Link Install', callback_data: 'link_install' }
-  ],
-  [
-    { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
-  ],
-];
+const keyboard = [];
+
+if (isReseller) {
+  // Menu untuk reseller
+  keyboard.push(
+    [
+      { text: '➕ Beli SC TUNNEL', callback_data: 'register_ip' },
+      { text: '♻️ Renew SC TUNNEL', callback_data: 'renew_ip' }
+    ],
+    [
+      { text: '❌ Delete SC TUNNEL', callback_data: 'del_ip' },
+      { text: '⌛ Trial SC TUNNEL', callback_data: 'trial_ip' }
+    ],
+    [
+      { text: '🔄 Ganti SC TUNNEL', callback_data: 'ganti_ip' },
+      { text: '🔗 Link Install', callback_data: 'link_install' }
+    ],
+    [
+      { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
+    ]
+  );
+} else {
+  // Menu untuk user biasa (belum reseller)
+  keyboard.push(
+    [
+      { text: '➕ Beli SC TUNNEL', callback_data: 'register_ip' },
+      { text: '♻️ Renew SC TUNNEL', callback_data: 'renew_ip' }
+    ],
+    [
+      { text: '⌛ Trial SC TUNNEL', callback_data: 'trial_ip' },
+      { text: '🔗 Link Install', callback_data: 'link_install' }
+    ],
+    [
+      { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
+    ],
+    [
+      { text: '🤝 Yuk Jadi Reseller & Dapat Harga Spesial!', callback_data: 'jadi_reseller' }
+    ]
+  );
+}
+
 
   try {
     if (ctx.updateType === 'callback_query') {
@@ -328,8 +372,6 @@ const keyboard = [
     logger.error('Error umum saat mengirim menu utama:', error);
   }
 }
-
-const resselFilePath = path.join(__dirname, 'ressel.db');
 
 bot.command('addressel', async (ctx) => {
   try {
@@ -486,6 +528,23 @@ bot.command('broadcast', async (ctx) => {
           { parse_mode: 'Markdown' }
       );
   });
+});
+
+bot.action('jadi_reseller', async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const userId = ctx.from.id;
+
+await ctx.reply(
+  `📩 Hubungi admin ${ADMIN_USERNAME} untuk menjadi Reseller.\n\n` +
+  `💰 <b>Minimal deposit:</b> Rp50,000\n\n` +
+  `✨ <b>Fitur khusus Reseller:</b>\n` +
+  `• Harga per bulan: Rp2.500\n` +
+  `• Trial: Unlimited\n` +
+  `• Bisa delete IP\n\n` +
+  `Kirim pesan ke admin dengan format:\n` +
+  `<code>Mau jadi reseller ${userId}</code>`,
+  { parse_mode: 'HTML' }
+);
 });
 
 bot.action('link_install', async (ctx) => {
@@ -669,7 +728,7 @@ bot.action('del_ip', async (ctx) => {
       const isRessel = resselList.includes(idUser);
 
       if (!isRessel) {
-        return ctx.reply('❌ *Fitur ini hanya untuk Ressel VPN.*', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ *Fitur ini hanya untuk Ressel SC.*', { parse_mode: 'Markdown' });
       }
   //izin ressel saja
   return ctx.reply('🌐 *Masukkan IP yang ingin di hapus:*', { parse_mode: 'Markdown' });
@@ -701,7 +760,13 @@ bot.on('text', async (ctx) => {
 
     const ip = state.ip;
     const exp = 30;
-    const totalHarga = 5000;
+  // ==== Tentukan harga sesuai status user ====
+let totalHarga = 5000; // default untuk user biasa
+
+if (isReseller) {
+  totalHarga = 2500; // harga khusus reseller
+}
+
 
 db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, row) => {
       if (err || !row) {
@@ -715,6 +780,11 @@ db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, r
       }
 
       ctx.reply('🔧 *Memproses pendaftaran IP...*', { parse_mode: 'Markdown' });
+
+const maskedIp = ip.length > 3 
+  ? `${ip.slice(0, 3)}${'x'.repeat(ip.length - 3)}` 
+  : ip;
+
 // 🔔 IP Created
 await bot.telegram.sendMessage(
   GROUP_ID,
@@ -722,7 +792,7 @@ await bot.telegram.sendMessage(
 📢 <b>IP Registered Created</b>
 ━━━━━━━━━━━━━━━━━━━━
 👤 <b>User:</b> ${ctx.from.first_name} (${ctx.from.id})
-🌐 <b>IP:</b> ${ip}
+🌐 <b>IP:</b> ${maskedIp}
 📛 <b>Nama:</b> ${nama}
 💰 <b>Harga:</b> Rp${totalHarga.toLocaleString('id-ID')}
 📆 <b>Expired:</b> ${exp || '-'} hari
@@ -790,6 +860,9 @@ db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, r
         delete userState[ctx.chat.id];
         return ctx.reply('❌ *Saldo tidak cukup.*', { parse_mode: 'Markdown' });
       }
+const maskedIp = ip.length > 3 
+  ? `${ip.slice(0, 3)}${'x'.repeat(ip.length - 3)}` 
+  : ip;
 // 🔔 IP Trial
 await bot.telegram.sendMessage(
   GROUP_ID,
@@ -797,7 +870,7 @@ await bot.telegram.sendMessage(
 🧪 <b>IP Registered Trial</b>
 ━━━━━━━━━━━━━━━━━━━━
 👤 <b>User:</b> ${ctx.from.first_name} (${ctx.from.id})
-🌐 <b>IP:</b> ${ip}
+🌐 <b>IP:</b> ${maskedIp}
 📛 <b>Nama:</b> ${nama}
 📆 <b>Expired:</b> ${exp || '-'} hari
 ━━━━━━━━━━━━━━━━━━━━
@@ -885,20 +958,28 @@ if (state.step === 'input_ganti_ip') {
     }
 
     const cleanOutput = stdout.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '').trim();
+    
+const maskedIpLama = ipLama.length > 3 
+  ? `${ipLama.slice(0, 3)}${'x'.repeat(ipLama.length - 3)}` 
+  : ipLama;
 
-    // 🔔 Notifikasi ke grup admin
-    await bot.telegram.sendMessage(
-      GROUP_ID,
-      `<blockquote>
+const maskedIpBaru = ipBaru.length > 3 
+  ? `${ipBaru.slice(0, 3)}${'x'.repeat(ipBaru.length - 3)}` 
+  : ipBaru;
+
+// 🔔 Notifikasi ke grup admin
+await bot.telegram.sendMessage(
+  GROUP_ID,
+  `<blockquote>
 ♻️ <b>IP Diganti</b>
 ━━━━━━━━━━━━━━━━━━━━
 👤 <b>User:</b> ${ctx.from.first_name} (${ctx.from.id})
-🌐 <b>IP Lama:</b> ${ipLama}
-🌐 <b>IP Baru:</b> ${ipBaru}
+🌐 <b>IP Lama:</b> ${maskedIpLama}
+🌐 <b>IP Baru:</b> ${maskedIpBaru}
 ━━━━━━━━━━━━━━━━━━━━
 </blockquote>`,
-      { parse_mode: 'HTML' }
-    );
+  { parse_mode: 'HTML' }
+);
 
     ctx.reply(
       `✅ *IP berhasil diganti!*\n🌐 *IP Lama:* \`${ipLama}\`\n🌐 *IP Baru:* \`${ipBaru}\`\n`,
@@ -918,7 +999,13 @@ if (state.step === 'input_ganti_ip') {
     }
 
     const exp = 30;
-    const totalHarga = 5000;
+  // ==== Tentukan harga sesuai status user ====
+let totalHarga = 5000; // default untuk user biasa
+
+if (isReseller) {
+  totalHarga = 2500; // harga khusus reseller
+}
+
 
 db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, row) => {
       if (err || !row) {
@@ -930,6 +1017,9 @@ db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, r
         delete userState[ctx.chat.id];
         return ctx.reply('❌ *Saldo tidak cukup. Minimal Rp5.000*', { parse_mode: 'Markdown' });
       }
+const maskedIp = ip.length > 3 
+  ? `${ip.slice(0, 3)}${'x'.repeat(ip.length - 3)}` 
+  : ip;
 // 🔔 IP Renew
 await bot.telegram.sendMessage(
   GROUP_ID,
@@ -937,7 +1027,7 @@ await bot.telegram.sendMessage(
 ♻️ <b>Account Renewed</b>
 ━━━━━━━━━━━━━━━━━━━━
 👤 <b>User:</b> ${ctx.from.first_name} (${ctx.from.id})
-🌐 <b>IP:</b> ${ip}
+🌐 <b>IP:</b> ${maskedIp}
 📛 <b>Nama:</b> ${nama}
 📆 <b>New Expiry:</b> ${exp || '-'} hari
 💾 <b>Quota:</b> ${quota || '-'}
@@ -982,7 +1072,13 @@ logger.info(`✅ Transaksi sukses untuk user ${ctx.from.id}`);
     if (!ipRegex.test(ip)) {
       return ctx.reply('❌ *Format IP tidak valid.* Coba lagi.', { parse_mode: 'Markdown' });
     }
-    const totalHarga = 5000;
+  // ==== Tentukan harga sesuai status user ====
+let totalHarga = 5000; // default untuk user biasa
+
+if (isReseller) {
+  totalHarga = 2500; // harga khusus reseller
+}
+
 
 db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, row) => {
       if (err || !row) {
@@ -994,6 +1090,9 @@ db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, r
         delete userState[ctx.chat.id];
         return ctx.reply('❌ *Saldo tidak cukup. Minimal Rp5.000*', { parse_mode: 'Markdown' });
       }
+const maskedIp = ip.length > 3 
+  ? `${ip.slice(0, 3)}${'x'.repeat(ip.length - 3)}` 
+  : ip;
 // 🔔 IP Deleted
 await bot.telegram.sendMessage(
   GROUP_ID,
@@ -1001,7 +1100,7 @@ await bot.telegram.sendMessage(
 🗑️ <b>IP Registered Deleted</b>
 ━━━━━━━━━━━━━━━━━━━━
 👤 <b>User:</b> ${ctx.from.first_name} (${ctx.from.id})
-🌐 <b>IP:</b> ${ip}
+🌐 <b>IP:</b> ${maskedIp}
 ━━━━━━━━━━━━━━━━━━━━
 </blockquote>`,
   { parse_mode: 'HTML' }
@@ -1311,17 +1410,28 @@ bot.on('callback_query', async (ctx) => {
 });
 
 async function handleDepositState(ctx, userId, data) {
-  let currentAmount = global.depositState[userId].amount;
+  // Cek apakah user reseller
+  const isReseller = await isUserReseller(userId);
+  const statusReseller = isReseller ? 'Reseller' : 'Bukan Reseller';
+  const minDeposit = isReseller ? 50000 : 5000; // 100k untuk reseller, 1k untuk user biasa
+
+  let currentAmount = global.depositState[userId].amount || '';
 
   if (data === 'delete') {
     currentAmount = currentAmount.slice(0, -1);
   } else if (data === 'confirm') {
-    if (currentAmount.length === 0) {
+    const amount = Number(currentAmount) || 0;
+
+    if (amount === 0) {
       return await ctx.answerCbQuery('⚠️ Jumlah tidak boleh kosong!', { show_alert: true });
     }
-    if (parseInt(currentAmount) < 5000) {
-      return await ctx.answerCbQuery('⚠️ Jumlah minimal adalah 5.000 !', { show_alert: true });
+    if (amount < minDeposit) {
+      return await ctx.answerCbQuery(
+        `⚠️ Jumlah minimal deposit untuk ${statusReseller} adalah Rp${minDeposit.toLocaleString()}!`,
+        { show_alert: true }
+      );
     }
+
     global.depositState[userId].action = 'confirm_amount';
     await processDeposit(ctx, currentAmount);
     return;
@@ -1334,20 +1444,20 @@ async function handleDepositState(ctx, userId, data) {
   }
 
   global.depositState[userId].amount = currentAmount;
-  const newMessage = `💰 *Silakan masukkan jumlah nominal saldo yang Anda ingin tambahkan ke akun Anda:*\n\nJumlah saat ini: *Rp ${currentAmount || '0'}*`;
-  
+  const newMessage = `💰 Silakan masukkan jumlah nominal saldo yang Anda ingin tambahkan ke akun Anda:\n\nJumlah saat ini: Rp${currentAmount || '0'}`;
+
   try {
-  if (newMessage !== ctx.callbackQuery.message.text) {
-    await ctx.editMessageText(newMessage, {
-      reply_markup: { inline_keyboard: keyboard_nomor() },
-      parse_mode: 'Markdown'
-    });
+    if (newMessage !== ctx.callbackQuery.message.text) {
+      await ctx.editMessageText(newMessage, {
+        reply_markup: { inline_keyboard: keyboard_nomor() },
+        parse_mode: 'HTML'
+      });
     } else {
       await ctx.answerCbQuery();
     }
   } catch (error) {
     await ctx.answerCbQuery();
-    logger.error('Error editing message:', error.message);
+    logger.error('Error editing message:', error);
   }
 }
 
