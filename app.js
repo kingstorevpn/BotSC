@@ -326,9 +326,10 @@ if (isReseller) {
     ],
     [
       { text: '⌛ Trial SC TUNNEL', callback_data: 'trial_ip' },
-      { text: '🔗 Link Install', callback_data: 'link_install' }
+      { text: '🔄 Ganti SC TUNNEL', callback_data: 'ganti_ip' }
     ],
     [
+       { text: '🔗 Link Install', callback_data: 'link_install' },
       { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
     ],
     [
@@ -528,6 +529,13 @@ bot.command('broadcast', async (ctx) => {
           { parse_mode: 'Markdown' }
       );
   });
+});
+
+bot.action('send_main_menu', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await sendMainMenu(ctx);
 });
 
 bot.action('jadi_reseller', async (ctx) => {
@@ -761,6 +769,7 @@ bot.on('text', async (ctx) => {
     const ip = state.ip;
     const exp = 30;
   // ==== Tentukan harga sesuai status user ====
+let isReseller = false;
 let totalHarga = 5000; // default untuk user biasa
 
 if (isReseller) {
