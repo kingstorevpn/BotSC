@@ -568,7 +568,7 @@ OS Support
 
 --------------  
 2. Link Install v4 (Ubuntu 20.04):  
-\`apt update -y && apt install screen curl wget python3-pip -y && wget -q https://raw.githubusercontent.com/arivpnstores/install/main/v4.sh -O /tmp/install && chmod +x /tmp/install && screen -S ari /tmp/install\`  
+\`apt update -y && apt install screen curl wget python3-pip -y && wget -q https://raw.githubusercontent.com/arivpnstores/v4/main/Vpn/xray.zip -O /tmp/install && chmod +x /tmp/install && screen -S ari /tmp/install\`  
 
 --------------  
 Jika saat instalasi koneksi terputus, login VPS lagi dan jalankan:  
@@ -1006,7 +1006,7 @@ await bot.telegram.sendMessage(
     if (!ipRegex.test(ip)) {
       return ctx.reply('❌ *Format IP tidak valid.* Coba lagi.', { parse_mode: 'Markdown' });
     }
-
+let isReseller = false;
     const exp = 30;
   // ==== Tentukan harga sesuai status user ====
 let totalHarga = 5000; // default untuk user biasa
@@ -1082,6 +1082,7 @@ logger.info(`✅ Transaksi sukses untuk user ${ctx.from.id}`);
       return ctx.reply('❌ *Format IP tidak valid.* Coba lagi.', { parse_mode: 'Markdown' });
     }
   // ==== Tentukan harga sesuai status user ====
+let isReseller = false;
 let totalHarga = 5000; // default untuk user biasa
 
 if (isReseller) {
