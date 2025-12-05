@@ -56,7 +56,7 @@ function line_tengh() {
 function ARI_Banner() {
     clear
     line_atas
-    echo -e "\e[36m        .::. \033[0;35mARISCTUNNEL V4 \e[36m.::.        \033[0m"
+    echo -e "\e[36m        .::. \033[0;35mKINGSTORE V4 \e[36m.::.        \033[0m"
     line_bawah
 }
 
@@ -77,7 +77,7 @@ ipku=$(curl -sS ipv4.icanhazip.com)
 ipsaya=$(curl -sS ipv4.icanhazip.com)
 data_server=$(curl -v --insecure --silent https://google.com/ 2>&1 | grep Date | sed -e 's/< Date: //')
 date_list=$(date +"%Y-%m-%d" -d "$data_server")
-data_ip="https://raw.githubusercontent.com/arivpnstores/izin/main/ip-admin"
+data_ip="https://raw.githubusercontent.com/kingstorevpn/izin/main/ip-admin"
 
 checking_sc() {
     useexp=$(wget -qO- $data_ip | grep $ipsaya | awk '{print $3}')
@@ -90,8 +90,8 @@ checking_sc() {
         echo -e "            ${RED}DAFTAR DULU DEK !"
         echo -e "   \033[0;33mYour VPS $ipsaya \033[0;33mHas been Banned"
         echo -e "     \033[0;33mBuy access permissions for scripts"
-        echo -e "             \033[0;33mContact Admin :"
-        echo -e "      WhatsApp wa.me/6281327393959"
+        echo -e "             \033[0;33mContact Admin : @kingstorevpn"
+        echo -e "      WhatsApp wa.me/"
         echo -e "\033[1;93m────────────────────────────────────────────\033[0m"
         exit
     fi
