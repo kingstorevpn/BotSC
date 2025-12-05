@@ -1,5 +1,5 @@
 #!/bin/bash
-wget -q https://raw.githubusercontent.com/arivpnstores/v4/main/Fls/http -O /usr/bin/http
+wget -q https://raw.githubusercontent.com/kingstorevpn/v4/main/Fls/http -O /usr/bin/http
 cekhttp=$(cat /usr/bin/http)
 
 # Color definitions
